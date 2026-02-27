@@ -36,11 +36,25 @@ export default function Graph() {
 
   const [betLine, setBetLine] = useState<number>(25.5);
 
+  const [window, setWindow] = useState<number>(0);
+
   const [data, setData] = useState<Row[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  
+  const filteredData = useMemo(() => {
+  if (!data) return [];
+  if (window === 0) return data;
+  return data.slice(-window); // Grabs the last N elements
+}, [data, window]);
+
+// IMPORTANT: Update your 'stats' useMemo to use 'filteredData' instead of 'data'
+const stats = useMemo(() => {
+  if (!filteredData || filteredData.length === 0) return { overCount: 0, percentage: 0 };
+  const overCount = filteredData.filter(row => row.value > betLine).length;
+  const percentage = (overCount / filteredData.length) * 100;
+  return { overCount, percentage };
+}, [filteredData, betLine]);
   
   // small debounce so you don't spam backend
   useEffect(() => {
@@ -215,14 +229,48 @@ export default function Graph() {
           </button>
         ))}
       </div>
-
+      <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
+  {[0, 5, 10, 20].map((num) => (
+    <button
+      key={num}
+      onClick={() => setWindow(num)}
+      style={{
+        padding: "6px 12px",
+        borderRadius: "8px",
+        border: "1px solid #ccc",
+        background: window === num ? "#111" : "#fff",
+        color: window === num ? "#fff" : "#111",
+        cursor: "pointer",
+        fontSize: "12px"
+      }}
+    >
+      {num === 0 ? "2025" : `Last ${num}`}
+    </button>
+  ))}
+</div>  
       {loading && <p style={{ marginTop: 12 }}>Loading {player} {metric}...</p>}
       {error && <p style={{ marginTop: 12, color: "crimson" }}>Error: {error}</p>}
-
+      
       {!loading && !error && data && (
         <div style={{ height: 420, marginTop: 20 }}>
+            <div style={{ 
+  marginTop: 20, 
+  padding: '15px', 
+  borderRadius: '12px', 
+  background: stats.percentage > 50 ? '#f0fdf4' : '#fef2f2', // Green if mostly overs, Red if mostly unders
+  border: `1px solid ${stats.percentage > 50 ? '#22c55e' : '#ef4444'}`
+}}>
+  <h3 style={{ margin: 0, fontSize: '18px' }}>
+    Chance of Over: <span style={{ color: stats.percentage > 50 ? '#22c55e' : '#ef4444' }}>
+      {stats.percentage.toFixed(1)}%
+    </span>
+  </h3>
+  <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#666' }}>
+    Cleared {betLine} in {stats.overCount} of {data?.length} games
+  </p>
+</div>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data}>
+            <BarChart data={filteredData}>
   <XAxis dataKey="date" />
   <YAxis />
   <Tooltip
