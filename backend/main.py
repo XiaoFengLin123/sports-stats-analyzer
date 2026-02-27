@@ -1,12 +1,12 @@
-from fastapi import FastAPI, Query
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import sqlite3
 import pandas as pd
+import numpy as np
 
 app = FastAPI()
 
-# VERY IMPORTANT: This allows your React app (usually on port 3000 or 5173) 
-# to talk to your Python app (on port 8000).
+# Enable communication between React and FastAPI
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -16,46 +16,45 @@ app.add_middleware(
 
 DB_PATH = "sports.db"
 
+# --- 1. PLAYER SEARCH ENDPOINT ---
+@app.get("/api/players")
+def search_players(q: str = ""):
+    conn = sqlite3.connect(DB_PATH)
+    if len(q) < 2: return {"players": []}
+    try:
+        query = "SELECT DISTINCT player_name FROM games WHERE player_name LIKE ? LIMIT 10"
+        df = pd.read_sql(query, conn, params=(f"%{q}%",))
+        return {"players": df["player_name"].tolist()}
+    finally:
+        conn.close()
+
+# --- 2. GRAPH DATA ENDPOINT ---
 @app.get("/api/bar")
 def get_player_stats(name: str = "LeBron James", metric: str = "PTS"):
-    # 1. Connect to our sports.db
     conn = sqlite3.connect(DB_PATH)
-    
-    # 2. Convert metric (e.g., "PTS") to match our DB column names (pts)
-    # Your React uses "PTS", but our DB uses "pts"
-
-    
-    METRIC_MAP = {
-    "PTS": "pts",
-    "REB": "reb",
-    "AST": "ast",
-    "BLK": "blk",
-    "STL": "stl",
-    "TO": "to",   # change this if your DB uses "to"
-}
-    db_column = METRIC_MAP.get(metric)
-
-    if not db_column:return {"error": f"Invalid metric: {metric}"}
-    
-    # 3. Query the data
-    query = f"""
-        SELECT game_date as date, matchup as opp, "{db_column}" as value 
-        FROM games 
-        WHERE player_name LIKE ? 
-        ORDER BY date ASC
-    """
+    METRIC_MAP = {"PTS": "pts", "REB": "reb", "AST": "ast", "BLK": "blk", "STL": "stl", "TO": "to"}
+    db_column = METRIC_MAP.get(metric, "pts")
     
     try:
-        df = pd.read_sql(query, conn, params=(f"%{name}%",))
-        # Format the date so it looks nice on the X-Axis
-        df['date'] = pd.to_datetime(df['date']).dt.strftime('%b %d')
+        query = f'SELECT game_date, matchup, "{db_column}" as value FROM games WHERE player_name = ?'
+        df = pd.read_sql(query, conn, params=(name,))
         
-        return {
-            "name": name,
-            "metric": metric,
-            "rows": df.to_dict(orient="records")
-        }
+        if df.empty:
+            return {"name": name, "metric": metric, "rows": []}
+
+        # Format and Sort
+        df['date'] = pd.to_datetime(df['game_date']).dt.strftime('%b %d')
+        df['opp'] = df['matchup'].str.split(' ').str[-1]
+        df['game_date_dt'] = pd.to_datetime(df['game_date'])
+        df = df.sort_values('game_date_dt')
+
+        # Clean NaNs for JSON compatibility
+        df = df.replace({np.nan: None, np.inf: None, -np.inf: None})
+
+        rows = df[['date', 'opp', 'value']].to_dict(orient="records")
+        return {"name": name, "metric": metric, "rows": rows}
     except Exception as e:
+        print(f"Stats Error: {e}")
         return {"error": str(e)}
     finally:
         conn.close()

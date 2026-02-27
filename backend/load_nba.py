@@ -1,32 +1,24 @@
+from nba_api.stats.endpoints import playergamelogs
 import pandas as pd
-import sqlite3
-from nba_api.stats.endpoints import playergamelog
-from nba_api.stats.static import players
-from sqlalchemy import create_engine, inspect
-from pathlib import Path
+from sqlalchemy import create_engine
 
 # --- SETUP ---
-BASE_DIR = Path(__file__).resolve().parent
-DB_PATH = BASE_DIR / "sports.db"
-engine = create_engine(f"sqlite:///{DB_PATH}")
+engine = create_engine("sqlite:///sports.db")
 
-def get_player_id(name: str) -> int:
-    res = players.find_players_by_full_name(name)
-    if not res:
-        raise ValueError(f"Player not found: {name}")
-    return res[0]["id"]
+def sync_entire_league(season="2025-26"):
+    print(f"🚀 Fetching all game logs for the {season} season...")
+    
+    # 1. Fetch ALL player game logs for the season in ONE go
+    # This returns one row for every player per game they played
+    logs = playergamelogs.PlayerGameLogs(season_nullable=season)
+    df = logs.get_data_frames()[0]
 
-def load_player_games(full_name: str, season: str = "2025-26"):
-    # 1. Fetch data from API
-    player_id = get_player_id(full_name)
-    gamelog = playergamelog.PlayerGameLog(player_id=player_id, season=season)
-    df = gamelog.get_data_frames()[0]
-
-    # 2. Transform into our desired schema
+    # 2. Map the API columns to your database columns
+    # The API returns uppercase, so we lowercase them to match your schema
     out = pd.DataFrame({
-        "player_id": player_id,
-        "player_name": full_name,
-        "game_id": df["Game_ID"],
+        "player_id": df["PLAYER_ID"],
+        "player_name": df["PLAYER_NAME"],
+        "game_id": df["GAME_ID"],
         "game_date": pd.to_datetime(df["GAME_DATE"]),
         "matchup": df["MATCHUP"],
         "wl": df["WL"],
@@ -39,26 +31,26 @@ def load_player_games(full_name: str, season: str = "2025-26"):
         "to": df["TOV"]
     })
 
-    # 3. Smart-Load (Deduplication)
-    # Check if the table exists first
-    if inspect(engine).has_table("games"):
-        # Get existing IDs so we don't add them twice
-        existing_ids = pd.read_sql("SELECT game_id FROM games", engine)["game_id"].tolist()
-        # Only keep rows where game_id is NOT in the database already
-        new_games = out[~out["game_id"].isin(existing_ids)]
-    else:
-        new_games = out
+    # 3. Smart-Load (Only add games we don't have)
+    try:
+        # We check for a unique string of "PlayerID_GameID"
+        query = "SELECT CAST(player_id AS TEXT) || '_' || CAST(game_id AS TEXT) as unique_key FROM games"
+        existing_keys = pd.read_sql(query, engine)["unique_key"].tolist()
+        
+        # Create the same key in our new data
+        out["unique_key"] = out["player_id"].astype(str) + "_" + out["game_id"].astype(str)
+        
+        # Filter out the stuff we already have
+        new_games = out[~out["unique_key"].isin(existing_keys)].drop(columns=["unique_key"])
+    except Exception as e:
+        new_games = out # Table doesn't exist yet
 
-    # 4. Save only the new stuff
+    # 4. Save
     if not new_games.empty:
         new_games.to_sql("games", engine, if_exists="append", index=False)
-        print(f"✅ Added {len(new_games)} new games for {full_name}.")
+        print(f"✅ Successfully synced {len(new_games)} new player-game entries.")
     else:
-        print(f"ℹ️ No new games found for {full_name}. Database is already up to date.")
+        print("ℹ️ Everything is already up to date.")
 
 if __name__ == "__main__":
-    # You can now add multiple players here safely!
-    players_to_track = ["LeBron James", "Stephen Curry", "Kevin Durant"]
-    
-    for player in players_to_track:
-        load_player_games(player, season="2025-26")
+    sync_entire_league()

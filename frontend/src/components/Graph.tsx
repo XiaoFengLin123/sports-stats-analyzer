@@ -34,7 +34,7 @@ export default function Graph() {
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [showSug, setShowSug] = useState(false);
 
-  const [betLine, setBetLine] = useState<number>(25.5);
+  const [betLine, setBetLine] = useState<number>(20.5);
 
   const [window, setWindow] = useState<number>(0);
 
@@ -266,7 +266,7 @@ const stats = useMemo(() => {
     </span>
   </h3>
   <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#666' }}>
-    Cleared {betLine} in {stats.overCount} of {data?.length} games
+    Cleared {betLine} in {stats.overCount} of {filteredData.length} games
   </p>
 </div>
           <ResponsiveContainer width="100%" height="100%">
@@ -291,7 +291,7 @@ const stats = useMemo(() => {
 
   {/* Mapping through data to color each Bar individually */}
   <Bar dataKey="value">
-    {data.map((entry, index) => (
+    {filteredData.map((entry, index) => (
       <Cell 
         key={`cell-${index}`} 
         // If the value is LOWER than the line, it's RED (The Under)
