@@ -1,49 +1,60 @@
+import { useState } from "react";
 import {
-  LineChart,
-  Line,
+  BarChart,
+  Bar,
   XAxis,
   YAxis,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from "recharts";
 
 type Row = {
-  date: string;
-  points: number;
-  rolling: number;
+  label: string;
+  value: number;
 };
 
-type GraphProps = {
-  data: Row[] | null;
-  onOpenGraph: () => void;
+type ApiResponse = {
+  labels: string[];
+  values: number[];
+  name: string;
+  metric: string;
 };
 
-export default function Graph({ data, onOpenGraph }: GraphProps) {
-    return (
-    <>
-    
-          <button onClick={onOpenGraph}>Open Graph</button>
-    
-          {!data ? (
-            <p style={{ marginTop: 20 }}>
-              Click "Open Graph" to render the chart.
-            </p>
-          ) : (
-            <div style={{ height: 400, marginTop: 20 }}>
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={data}>
-                  <XAxis dataKey="date" />
-                  <YAxis />
-                  <Tooltip />
-                  <Legend />
-                  <Line type="monotone" dataKey="points" />
-                  <Line type="monotone" dataKey="rolling" />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </>
+export default function Graph() {
+  const [data, setData] = useState<Row[] | null>(null);
+
+  const fetchData = async () => {
+    const res = await fetch(
+      "http://localhost:8000/api/bar?name=Lebron&metric=REB"
     );
-    
+    const json: ApiResponse = await res.json();
+
+    const rows: Row[] = json.labels.map((label, i) => ({
+      label,
+      value: json.values[i],
+    }));
+
+    setData(rows);
+  };
+
+  return (
+    <div>
+      <button onClick={fetchData}>Load Bar Chart</button>
+
+      {!data ? (
+        <p style={{ marginTop: 20 }}>Click to load chart.</p>
+      ) : (
+        <div style={{ height: 420, marginTop: 20 }}>
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={data}>
+              <XAxis dataKey="label" />
+              <YAxis />
+              <Tooltip />
+              <Bar dataKey="value" />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
 }

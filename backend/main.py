@@ -1,34 +1,44 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
 import pandas as pd
+from pathlib import Path
 
 app = FastAPI()
 
-# Allow React dev server to call API
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000"],
-    allow_credentials=True,
+    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-@app.get("/api/stats")
-def get_stats(stat: str = "points", window: int = 3):
-    df = pd.read_csv("../data/sample_stats.csv")
-    df["date"] = pd.to_datetime(df["date"])
-    df = df.sort_values("date")
+DATA_PATH = "../data/games.csv"
 
-    if stat not in df.columns:
-        return {"error": f"Unknown stat: {stat}", "available": [c for c in df.columns if c != "date"]}
+@app.get("/api/bar")
+def bar(
+    name: str = Query(..., description="Player name"),
+    metric: str = Query(..., description="Stat like PTS, REB, AST"),
+):
+    df = pd.read_csv(DATA_PATH)
+    df.columns = df.columns.str.strip()
 
-    rolling = df[stat].rolling(window=window, min_periods=1).mean()
+    if metric not in df.columns:
+        return {"error": f"Unknown metric: {metric}", "available": list(df.columns)}
 
-    # Send JSON to frontend
+    df["Date"] = pd.to_datetime(df["Date"])
+    df = df.sort_values("Date")
+
+    df = df[df["Name"].str.lower() == name.lower()]
+
+    if df.empty:
+        return {"error": f"No data for player {name}"}
+
+    labels = df["Date"].dt.strftime("%Y-%m-%d").tolist()
+    values = df[metric].fillna(0).tolist()
+
     return {
-        "stat": stat,
-        "window": window,
-        "dates": df["date"].dt.strftime("%Y-%m-%d").tolist(),
-        "values": df[stat].tolist(),
-        "rolling": rolling.tolist(),
+        "labels": labels,
+        "values": values,
+        "name": name,
+        "metric": metric,
     }
