@@ -7,7 +7,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from "recharts";
-type Metric = "PTS" | "REB" | "AST" | "BLK" | "STL" | "PF" | "TO";
+type Metric = "PTS" | "REB" | "AST" | "BLK" | "STL" | "TO";
 
 type Row = {
   date: string; 
@@ -20,7 +20,7 @@ type ApiResponse = {
     metric: string; 
     rows: Row[] };
 
-const METRICS: Metric[] = ["PTS", "REB", "AST", "BLK", "STL", "PF", "TO"];
+const METRICS: Metric[] = ["PTS", "REB", "AST", "BLK", "STL", "TO"];
 
 export default function Graph() {
   const [metric, setMetric] = useState<Metric>("PTS");

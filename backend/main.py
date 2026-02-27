@@ -1,67 +1,65 @@
 from fastapi import FastAPI, Query
 from fastapi.middleware.cors import CORSMiddleware
+import sqlite3
 import pandas as pd
-from pathlib import Path
 
 app = FastAPI()
 
+# VERY IMPORTANT: This allows your React app (usually on port 3000 or 5173) 
+# to talk to your Python app (on port 8000).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-BASE_DIR = Path(__file__).resolve().parent
-DATA_PATH = BASE_DIR.parent / "data" / "games.csv"
-
-
-@app.get("/")
-def root():
-    return {"status": "ok", "docs": "/docs"}
-
+DB_PATH = "sports.db"
 
 @app.get("/api/bar")
-def bar(
-    name: str = Query(..., description="Player name (e.g. Lebron)"),
-    metric: str = Query(..., description="Stat column (e.g. PTS, REB, AST, BLK, STL, PF, TO)"),
-):
-    df = pd.read_csv(DATA_PATH)
+def get_player_stats(name: str = "LeBron James", metric: str = "PTS"):
+    # 1. Connect to our sports.db
+    conn = sqlite3.connect(DB_PATH)
+    
+    # 2. Convert metric (e.g., "PTS") to match our DB column names (pts)
+    # Your React uses "PTS", but our DB uses "pts"
 
-    # Clean up headers + key string cols
-    df.columns = df.columns.str.strip()
-    if "Name" in df.columns:
-        df["Name"] = df["Name"].astype(str).str.strip()
-    if "Opp" in df.columns:
-        df["Opp"] = df["Opp"].astype(str).str.strip()
+    
+    METRIC_MAP = {
+    "PTS": "pts",
+    "REB": "reb",
+    "AST": "ast",
+    "BLK": "blk",
+    "STL": "stl",
+    "TO": "to",   # change this if your DB uses "to"
+}
+    db_column = METRIC_MAP.get(metric)
 
-    # Validate required columns
-    required = {"Name", "Date", "Opp"}
-    missing = [c for c in required if c not in df.columns]
-    if missing:
-        return {"error": f"Missing required columns: {missing}", "available": list(df.columns)}
-
-    # Validate metric
-    if metric not in df.columns:
-        return {"error": f"Unknown metric: {metric}", "available": list(df.columns)}
-
-    # Parse + sort by date safely
-    df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
-    df = df.dropna(subset=["Date"]).sort_values("Date")
-
-    # Filter player
-    df = df[df["Name"].str.lower() == name.lower()]
-    if df.empty:
-        return {"error": f"No data for player {name}"}
-
-    # Build rows for frontend (tooltip can show opp)
-    rows = [
-        {
-            "date": d.strftime("%Y-%m-%d"),
-            "opp": o,
-            "value": float(v) if pd.notna(v) else 0.0,
+    if not db_column:return {"error": f"Invalid metric: {metric}"}
+    
+    # 3. Query the data
+    query = f"""
+        SELECT game_date as date, matchup as opp, "{db_column}" as value 
+        FROM games 
+        WHERE player_name LIKE ? 
+        ORDER BY date ASC
+    """
+    
+    try:
+        df = pd.read_sql(query, conn, params=(f"%{name}%",))
+        # Format the date so it looks nice on the X-Axis
+        df['date'] = pd.to_datetime(df['date']).dt.strftime('%b %d')
+        
+        return {
+            "name": name,
+            "metric": metric,
+            "rows": df.to_dict(orient="records")
         }
-        for d, o, v in zip(df["Date"], df["Opp"], df[metric])
-    ]
+    except Exception as e:
+        return {"error": str(e)}
+    finally:
+        conn.close()
 
-    return {"name": name, "metric": metric, "rows": rows}
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
