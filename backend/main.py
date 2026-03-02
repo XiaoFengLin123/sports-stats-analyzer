@@ -35,7 +35,7 @@ def search_players(q: str = ""):
 def get_player_stats(name: str = "LeBron James", metric: str = "PTS"):
     conn = sqlite3.connect(DB_PATH)
     metric = metric.strip().upper()
-    METRIC_EXPR = {"PTS": "pts", "REB": "reb", "AST": "ast", "BLK": "blk", "STL": "stl", "TO": "to", "PRA": "pts + reb + ast", "PR" : "pts + reb", "RA" : "reb + ast"}
+    METRIC_EXPR = {"PTS": "pts", "REB": "reb", "AST": "ast", "BLK": "blk", "STL": "stl", "TO": '"to"', "PRA": "pts + reb + ast", "PR" : "pts + reb", "RA" : "reb + ast", "BS" : "blk + stl"}
     expr = METRIC_EXPR.get(metric, "pts")
     
     try:
