@@ -46,6 +46,8 @@ def get_player_stats(name: str = "LeBron James", metric: str = "PTS"):
           ({expr}) as value
         FROM games
         WHERE player_name = ?
+            AND matchup IS NOT NULL
+        ORDER BY game_date ASC
         """
         df = pd.read_sql(query, conn, params=(name,))
         
