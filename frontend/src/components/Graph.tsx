@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   BarChart,
   Bar,
@@ -9,7 +9,8 @@ import {
   Cell, 
   ReferenceLine
 } from "recharts";
-type Metric = "PTS" | "REB" | "AST" | "BLK" | "STL" | "TO";
+
+type Metric = "PTS" | "REB" | "AST" | "BLK" | "STL" | "TO" | "PRA" | "PR" | "RA";
 
 type Row = {
   date: string; 
@@ -24,9 +25,11 @@ type ApiResponse = {
 
 type PlayersResponse = { players: string[] };
 
-const METRICS: Metric[] = ["PTS", "REB", "AST", "BLK", "STL", "TO"];
+const METRICS: Metric[] = ["PTS", "REB", "AST", "BLK", "STL", "TO", "PRA", "PR", "RA"];
 
 export default function Graph() {
+
+  const reqIdRef = useRef(0);
   const [metric, setMetric] = useState<Metric>("PTS");
   const [playerInput, setPlayerInput] = useState("LeBron James");
   const [player, setPlayer] = useState("LeBron James"); 
@@ -96,6 +99,7 @@ const stats = useMemo(() => {
 
 
   const fetchData = async () => {
+    const myReqId = ++reqIdRef.current;
     setLoading(true);
     setError(null);
     try {
@@ -104,13 +108,21 @@ const stats = useMemo(() => {
       )}&metric=${metric}`;
       const res = await fetch(url);
       const json: ApiResponse = await res.json();
-      if (!res.ok || (json as any).error) throw new Error((json as any).error || `HTTP ${res.status}`);
+      if (!res.ok || (json as any).error) { throw new Error((json as any).error || `HTTP ${res.status}`);
+    }
+
+      if (myReqId === reqIdRef.current) {
       setData(json.rows);
+      }
     } catch (e: any) {
+      if (myReqId === reqIdRef.current) {
       setData(null);
       setError(e?.message ?? "Failed to load data");
+    }
     } finally {
+      if (myReqId === reqIdRef.current) {
       setLoading(false);
+    }
     }
   };
 

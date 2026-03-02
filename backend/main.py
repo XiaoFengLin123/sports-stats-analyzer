@@ -28,15 +28,25 @@ def search_players(q: str = ""):
     finally:
         conn.close()
 
+
+
 # --- 2. GRAPH DATA ENDPOINT ---
 @app.get("/api/bar")
 def get_player_stats(name: str = "LeBron James", metric: str = "PTS"):
     conn = sqlite3.connect(DB_PATH)
-    METRIC_MAP = {"PTS": "pts", "REB": "reb", "AST": "ast", "BLK": "blk", "STL": "stl", "TO": "to"}
-    db_column = METRIC_MAP.get(metric, "pts")
+    metric = metric.strip().upper()
+    METRIC_EXPR = {"PTS": "pts", "REB": "reb", "AST": "ast", "BLK": "blk", "STL": "stl", "TO": "to", "PRA": "pts + reb + ast", "PR" : "pts + reb", "RA" : "reb + ast"}
+    expr = METRIC_EXPR.get(metric, "pts")
     
     try:
-        query = f'SELECT game_date, matchup, "{db_column}" as value FROM games WHERE player_name = ?'
+        query = f"""
+        SELECT
+          game_date,
+          matchup,
+          ({expr}) as value
+        FROM games
+        WHERE player_name = ?
+        """
         df = pd.read_sql(query, conn, params=(name,))
         
         if df.empty:
@@ -58,6 +68,7 @@ def get_player_stats(name: str = "LeBron James", metric: str = "PTS"):
         return {"error": str(e)}
     finally:
         conn.close()
+
 
 if __name__ == "__main__":
     import uvicorn
